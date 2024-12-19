@@ -1,0 +1,54 @@
+variables:
+  FRONTEND_IMAGE: registry.gitlab.com/dci-project/arqsoft-dci/proyectos/1s2024/sporttime/stime-ui-admin:latest
+  BACKEND_IMAGE: registry.gitlab.com/dci-project/arqsoft-dci/proyectos/1s2024/sporttime/stime-api-admin:latest
+  BACKEND_USER_IMAGE: registry.gitlab.com/dci-project/arqsoft-dci/proyectos/1s2024/sporttime/stime-api-user:latest
+
+stages:
+  - prepare-app-dev
+  - build-app-dev
+  - deploy-app-dev
+
+prepare:
+  stage: prepare-app-dev
+  script:
+    - touch .env
+    - echo "VUE_APP_GOOGLE_CLIENT_ID="$VUE_APP_GOOGLE_CLIENT_ID >> .env
+    - echo "VUE_APP_SERVER_IP="$VUE_APP_SERVER_IP >> .env
+  artifacts:
+    paths:
+      - .env
+
+build-frontend:
+  stage: build-app-dev
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $FRONTEND_IMAGE .
+    - docker push $FRONTEND_IMAGE
+  only:
+    - develop
+
+deploy-dev:
+  stage: deploy-app-dev
+  only:
+    - develop
+  before_script:
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan $SERVER_IP_DEV >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+  script:
+    - scp docker-compose.yml $SERVER_USER_DEV@$SERVER_IP_DEV:$SERVER_PATH
+    - scp .env $SERVER_USER_DEV@$SERVER_IP_DEV:$SERVER_PATH
+    - ssh $SERVER_USER_DEV@$SERVER_IP_DEV "docker login -u \"$CI_REGISTRY_USER\" -p \"$CI_REGISTRY_PASSWORD\" $CI_REGISTRY"
+    - ssh $SERVER_USER_DEV@$SERVER_IP_DEV "cd $SERVER_PATH && docker-compose --profile ui-admin down -v && docker system prune -f"
+    - ssh $SERVER_USER_DEV@$SERVER_IP_DEV "docker images"
+    - ssh $SERVER_USER_DEV@$SERVER_IP_DEV "docker rmi \$(docker images -q | grep -v \$(docker images -q | grep -E 'postgres:16|$BACKEND_IMAGE|$BACKEND_USER_IMAGE')) -f" || true
+    - ssh $SERVER_USER_DEV@$SERVER_IP_DEV "docker pull \"$FRONTEND_IMAGE\""
+    - ssh $SERVER_USER_DEV@$SERVER_IP_DEV "cd $SERVER_PATH && docker-compose --profile ui-admin pull && docker-compose --profile ui-admin up -d"
+    - ssh $SERVER_USER_DEV@$SERVER_IP_DEV "rm -rf $SERVER_PATH/docker-compose.yml"
