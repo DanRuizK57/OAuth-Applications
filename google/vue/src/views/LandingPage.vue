@@ -2,17 +2,18 @@
     <h1 id="text">Inicio de sesión con Google</h1>
     <div class="container">
         <div>
-            <div class="google-button" @click="login">
-                <img id="google-logo" src="../assets/Logo Google.png" alt="Logo de Google">
-                <a class="google-link" href="#">Iniciar sesión con Google</a>
-            </div>
-            <GoogleLogin :callback="callback" />
+            <GoogleLogin :callback="callback" id="google-button">
+                <div class="google-button">
+                    <img id="google-logo" src="../assets/Logo Google.png" alt="Logo de Google">
+                    <a class="google-link" href="#">Iniciar sesión con Google</a>
+                </div>
+            </GoogleLogin>
         </div>
     </div>
 </template>
 
 <script>
-import { googleSdkLoaded, decodeCredential } from "vue3-google-login";
+import { decodeCredential } from "vue3-google-login";
 import axios from "axios";
 
 export default {
@@ -31,25 +32,6 @@ export default {
                 photo: userData.picture
             };
             this.sendCodeToBackend(googleUser);
-        },
-        login() {
-            // Obtener el código de autorización del usuario de Google
-            googleSdkLoaded(google => {
-                google.accounts.oauth2
-                    .initCodeClient({
-                        client_id: process.env.VUE_APP_GOOGLE_CLIENT_ID,
-                        scope: "email profile openid",
-                        redirect_uri: process.env.VUE_APP_GOOGLE_CALLBACK,
-                        callback: response => {
-                            console.log(response);
-                            const authorizationCode = response.code;
-                            if (authorizationCode) {
-                                this.sendCodeToBackend(authorizationCode);
-                            }
-                        }
-                    })
-                    .requestCode();
-            });
         },
         // Enviar el código de autorización del usuario al backend
         async sendCodeToBackend(googleUserObject) {
